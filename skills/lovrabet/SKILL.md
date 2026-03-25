@@ -122,6 +122,4 @@ Lovrabet 中文名为**云兔**，也常写作 **yuntoo**。本文档是**路由
 | 团队协作最佳实践 | `./guides/10-best-practices.md` |
 
 ## 配置文件位置
-
-- **详细配置说明**：`README.md` 或团队配置文档（若存在）
 - **Guides 目录**：`./guides/`
