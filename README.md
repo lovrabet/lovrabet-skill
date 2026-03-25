@@ -1,4 +1,4 @@
-# Lovrabet Skill（开放生态版）
+# Lovrabet Skill
 
 版本：1.0.0  
 来源：[lovrabet-skill](https://github.com/lovrabet/lovrabet-skill)
@@ -9,19 +9,7 @@ Lovrabet（云兔）是一个 AI-Native B 端开发平台，本 skill 包含 Lov
 
 ## 安装方式
 
-### 方式 1：平台内安装（推荐，完整功能）
-
-```bash
-lovrabet skill install
-```
-
-适用场景：
-
-* 已使用 `lovrabet-cli`
-* 需要和 rules、flags、config 联动
-* 需要完整受控安装流程
-
-### 方式 2：开放生态安装（快速接入）
+### 方式 1：开放生态（推荐）
 
 ```bash
 npx skills add lovrabet/lovrabet-skill
@@ -29,9 +17,16 @@ npx skills add lovrabet/lovrabet-skill
 
 适用场景：
 
-* 希望快速接入通用 agent 技能生态
-* 希望先试用 Lovrabet skill 能力
-* 不一定使用 lovrabet-cli
+* 希望接入通用 agent 技能生态（Cursor / Claude 等）
+* 本仓库公开分发与文档默认以此为准
+
+### 方式 2：Lovrabet CLI + 公司 CDN（可选）
+
+已使用 `@lovrabet/cli` 且需要与公司 CDN、rules、flags 联动时，可从 CDN 拉取 skill 资源：
+
+```bash
+lovrabet skill install
+```
 
 ## 能力矩阵
 
@@ -64,7 +59,7 @@ npx skills add lovrabet/lovrabet-skill
 lovrabet mcp install
 ```
 
-## Guides 文档（本版本共 11 个）
+## Guides 文档
 
 安装后，guides 位于 `guides/` 目录下：
 
@@ -77,7 +72,7 @@ lovrabet mcp install
 | `05-backend-function.md` | BFF 脚本开发 |
 | `06-data-api-guidelines.md` | 数据接口规范 |
 | `07-sql-creation-workflow.md` | SQL 创建工作流 |
-| `07-bff-sync-workflow.md` | BFF 同步与协作 |
+| `11-bff-sync-workflow.md` | BFF 同步与协作 |
 | `08-bff-creation-workflow.md` | BFF 创建工作流 |
 | `09-conflict-detection.md` | 冲突检测处理 |
 | `10-best-practices.md` | 团队协作最佳实践 |

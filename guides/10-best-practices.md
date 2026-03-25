@@ -378,23 +378,17 @@ AI 生成代码 → validate_sql_content 验证 → save_or_update_custom_sql
 如果返回 `confirmationRequired: true`，说明 HIGH 冲突阻断了保存，根据 `nextAction` 决定是否带 `forceUpdate: true` 重试或另起名字；如果返回 `nextAction: 'suggest_rename'`，说明是 MEDIUM 冲突，建议改名但不强制
 
 # 3. 查看现有资源
-MCP 工具：list_sql_queries / execute_custom_sql
-CLI：lovrabet sql list / lovrabet sql detail --name "xxx"
+MCP：`list_sql_queries`（列出已保存的自定义 SQL）、`execute_custom_sql`（执行已保存 SQL）
+平台：在 Lovrabet 控制台「自定义 SQL」列表中查看名称、说明与最近修改（以你环境菜单为准）
 ```
 
 ### 定期维护
 
-**每周一次**:
-```bash
-# 检查自己创建的资源
-lovrabet sql list --author me
+**建议每周一次**（无独立 CLI「按作者 / 按标签筛 SQL」能力时，用下面方式即可）：
 
-# 检查测试资源
-lovrabet sql list --tag "#测试中"
-
-# 清理过期的测试资源
-# （根据实际情况决定是否删除）
-```
+* 在平台「自定义 SQL」列表中核对：命名是否符合团队约定、是否仍有「临时 / 测试」类条目需要合并或下线。
+* 或在 MCP 中调用 `list_sql_queries`，结合你们在 SQL 名称、注释里的约定（例如前缀、说明字段）筛出待清理项。
+* 删除或重命名以**平台侧能力**为准；高风险变更前仍建议走 `09-conflict-detection.md` 里的冲突与沟通流程。
 
 ---
 

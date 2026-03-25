@@ -2,11 +2,10 @@
   "name": "lovrabet",
   "version": "1.0.0",
   "description": "Lovrabet 开发工作流 - SQL/BFF 安全创建流程，包含冲突检测和协作规范",
-  "buildTime": "2026-03-25T20:15:04.258Z",
   "guideCount": 11,
   "installMethods": [
-    "lovrabet skill install",
-    "npx skills add lovrabet/lovrabet-skill@lovrabet"
+    "npx skills add lovrabet/lovrabet-skill",
+    "lovrabet skill install"
   ],
   "requiresMcp": true,
   "mcpInstall": "lovrabet mcp install"

@@ -74,7 +74,7 @@ Lovrabet 中文名为**云兔**，也常写作 **yuntoo**。本文档是**路由
 
 **冲突处理**：保存工具返回 `blocked: true`（例如他人为最后提交者）时，告知用户在平台上手动处理，**不要**自动重试同一保存。`confirmationRequired` / `nextAction` 等字段以工具返回为准；细节见 `09-conflict-detection.md`。
 
-**BFF 写入类 MCP**：若看不到 `list_bff_scripts` / `save_or_update_bff_script`，请在数据集 MCP 的启动参数中加入 `--enable-bff-save`（与 CLI `lovrabet skill install --enable-bff-save` 同名），旧名 `--dangerously-bff-save` 仍可用；详见 BFF 同步相关 guide。
+**BFF 写入类 MCP**：若看不到 `list_bff_scripts` / `save_or_update_bff_script`，请在数据集 MCP 的启动参数中加入 `--enable-bff-save`，旧名 `--dangerously-bff-save` 仍可用；详见 `11-bff-sync-workflow.md`。
 
 ## 快速决策树
 
@@ -106,7 +106,7 @@ Lovrabet 中文名为**云兔**，也常写作 **yuntoo**。本文档是**路由
 
 ## 全部 Guides 索引
 
-> 所有 guide 文件均位于项目根目录的 `./guides/` 下（`lovrabet skill install` 全量安装）。
+> 推荐通过 `npx skills add lovrabet/lovrabet-skill` 安装后，guide 与本文档同目录下的 `./guides/`。若团队改用 Lovrabet CLI 从公司 CDN 安装，实际路径以 CLI 落盘位置为准（见项目内 README）。
 
 | 用户需求 | 参考的 Guide 文档 |
 |---------|------------------|
@@ -118,11 +118,11 @@ Lovrabet 中文名为**云兔**，也常写作 **yuntoo**。本文档是**路由
 | 数据接口规范 | `./guides/06-data-api-guidelines.md` |
 | SQL 创建工作流 | `./guides/07-sql-creation-workflow.md` |
 | BFF 创建工作流 | `./guides/08-bff-creation-workflow.md` |
-| BFF 同步与协作（平台脚本列表、保存） | `./guides/07-bff-sync-workflow.md` |
+| BFF 同步与协作（平台脚本列表、保存） | `./guides/11-bff-sync-workflow.md` |
 | 冲突检测和处理 | `./guides/09-conflict-detection.md` |
 | 团队协作最佳实践 | `./guides/10-best-practices.md` |
 
 ## 配置文件位置
 
-- **详细配置说明**：`.lovrabet/CONFIG.md`（若存在）
+- **详细配置说明**：`README.md` 或团队配置文档（若存在）
 - **Guides 目录**：`./guides/`
