@@ -1,7 +1,3 @@
-# Lovrabet Skill
-
-版本：1.0.0  
-来源：[lovrabet-skill](https://github.com/lovrabet/lovrabet-skill)
 
 ## 简介
 
