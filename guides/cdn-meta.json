@@ -1,7 +1,4 @@
 {
-  "11-bff-sync-workflow": {
-    "requireFlags": ["enable-bff-save"]
-  },
   "08-bff-creation-workflow": {
     "requireFlags": ["enable-bff-save"]
   }

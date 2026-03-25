@@ -74,7 +74,7 @@ Lovrabet 中文名为**云兔**，也常写作 **yuntoo**。本文档是**路由
 
 **冲突处理**：保存工具返回 `blocked: true`（例如他人为最后提交者）时，告知用户在平台上手动处理，**不要**自动重试同一保存。`confirmationRequired` / `nextAction` 等字段以工具返回为准；细节见 `09-conflict-detection.md`。
 
-**BFF 写入类 MCP**：若看不到 `list_bff_scripts` / `save_or_update_bff_script`，请在数据集 MCP 的启动参数中加入 `--enable-bff-save`，旧名 `--dangerously-bff-save` 仍可用；详见 `11-bff-sync-workflow.md`。
+**BFF 写入类 MCP**：若看不到 `list_bff_scripts` / `save_or_update_bff_script`，请在数据集 MCP 的启动参数中加入 `--enable-bff-save`，旧名 `--dangerously-bff-save` 仍可用；详见 `08-bff-creation-workflow.md` 中的“平台同步与协作速查”。
 
 ## 快速决策树
 
@@ -117,8 +117,7 @@ Lovrabet 中文名为**云兔**，也常写作 **yuntoo**。本文档是**路由
 | 创建 BFF 脚本 | `./guides/05-backend-function.md` |
 | 数据接口规范 | `./guides/06-data-api-guidelines.md` |
 | SQL 创建工作流 | `./guides/07-sql-creation-workflow.md` |
-| BFF 创建工作流 | `./guides/08-bff-creation-workflow.md` |
-| BFF 同步与协作（平台脚本列表、保存） | `./guides/11-bff-sync-workflow.md` |
+| BFF 创建、同步与协作 | `./guides/08-bff-creation-workflow.md` |
 | 冲突检测和处理 | `./guides/09-conflict-detection.md` |
 | 团队协作最佳实践 | `./guides/10-best-practices.md` |
 

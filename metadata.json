@@ -1,8 +1,8 @@
 {
   "name": "lovrabet",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Lovrabet 开发工作流 - SQL/BFF 安全创建流程，包含冲突检测和协作规范",
-  "guideCount": 11,
+  "guideCount": 10,
   "installMethods": [
     "npx skills add lovrabet/lovrabet-skill",
     "lovrabet skill install"

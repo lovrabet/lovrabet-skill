@@ -72,8 +72,7 @@ lovrabet mcp install
 | `05-backend-function.md` | BFF 脚本开发 |
 | `06-data-api-guidelines.md` | 数据接口规范 |
 | `07-sql-creation-workflow.md` | SQL 创建工作流 |
-| `11-bff-sync-workflow.md` | BFF 同步与协作 |
-| `08-bff-creation-workflow.md` | BFF 创建工作流 |
+| `08-bff-creation-workflow.md` | BFF 创建、同步与协作 |
 | `09-conflict-detection.md` | 冲突检测处理 |
 | `10-best-practices.md` | 团队协作最佳实践 |
 
