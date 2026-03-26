@@ -1,266 +1,31 @@
-# React 页面开发规范
+# 前端页面开发补充约束
 
-> **目标**：统一 React 页面开发风格，规范数据接口访问方式
+> 目标：只约束 Lovrabet 前端页面开发中的特有要求，不重复讲 React、Ant Design 或通用前端基础。
 >
-> **前置阅读**：`06-data-api-guidelines.md` - 数据接口访问规范（字段分析、依赖关系、性能优化）
+> 前置阅读：`06-data-api-guidelines.md`
 
----
+## 何时使用
 
-## 📋 开发流程
+当任务满足任一条件时，必须阅读并遵守本指南：
 
-```
-获取数据集详情 → 分析字段依赖 → 编写页面代码 → UI 风格检查
-```
+* 新建 Lovrabet 前端页面
+* 修改现有页面的数据集接入方式
+* 处理页面中的下拉、枚举、外键字段
+* 检查页面是否符合 Lovrabet CLI 和 UI 约束
 
----
+## 核心原则
 
-## 步骤 1: 获取数据集详情
+* 前端页面写代码前，必须先获取数据集详情
+* 字段名、外键关系、枚举选项都不得凭空猜测
+* 页面数据优先使用真实接口，不使用 mock 代替正式接入
+* 性能优化、批量查询、多表关系分析统一遵守 `06-data-api-guidelines.md`
+* 本文只保留 Lovrabet 特有要求，不承担 React 教程职能
 
-**编写页面代码前，必须先使用 MCP 工具获取数据集信息**：
+## 页面文件规范
 
-```
-请使用 get_dataset_detail 获取数据集 "orders" 的详情，
-列出所有字段及其类型、是否必填、主外键关系
-```
+### 页面顶部注释
 
-**返回信息分析**：
-
-| 信息项 | 说明 | 页面用途 |
-|-------|------|---------|
-| `fields` | 字段列表（名称、类型、是否必填） | 表单字段配置、校验规则 |
-| `dependencies` / `relations` | 主外键关系 | 下拉框数据来源 |
-| `fields[].options` | 枚举选项 | 固定下拉框选项 |
-
----
-
-## 步骤 2: 分析字段依赖关系
-
-### 主外键关系分析
-
-**从数据集详情中识别外键字段**，确定下拉框数据来源：
-
-```
-订单数据集字段分析：
-1. order_no (VARCHAR) 必填 → 文本输入框
-2. amount (DECIMAL) 必填 → 数字输入框
-3. customer_id (NUMBER) 必填，外键关联 customers.id
-   → 下拉框，数据来自 customers 表
-   → 显示 customer_name，存储 customer_id
-4. product_id (NUMBER) 必填，外键关联 products.id
-   → 下拉框，数据来自 products 表
-   → 显示 product_name，存储 product_id
-5. status (VARCHAR) 枚举字段
-   → 下拉框，使用固定选项
-   → options: ['pending', 'paid', 'cancelled']
-```
-
-### 下拉框数据来源推理
-
-| 字段类型 | 数据来源 | 处理方式 |
-|---------|---------|---------|
-| **外键字段** | 关联的数据集 | 调用关联数据集的 filter 接口 |
-| **枚举字段** | 字段定义的 options | 使用固定选项数组 |
-| **级联选择** | 父字段决定子字段 | 监听父字段变化，动态加载 |
-
-**示例代码**：
-
-```tsx
-// 分析：customer_id 是外键，关联 customers 表
-// 需要获取客户列表作为下拉框数据
-
-import { useState, useEffect } from 'react';
-import { Select } from 'antd';
-import { LovrabetClient } from '@lovrabet/sdk';
-
-const client = new LovrabetClient({ appCode: 'your-app-code' });
-
-function OrderForm() {
-  const [customers, setCustomers] = useState([]);
-
-  useEffect(() => {
-    // 使用真实接口获取客户列表
-    client.models.customers.filter({
-      select: ['id', 'customer_name'],
-      where: { status: { $eq: 'active' } }, // 只获取有效客户
-    }).then(result => {
-      setCustomers(result.tableData || []);
-    });
-  }, []);
-
-  return (
-    <Form.Item name="customer_id" label="客户" rules={[{ required: true }]}>
-      <Select options={customers.map(c => ({
-        label: c.customer_name,
-        value: c.id,
-      }))} />
-    </Form.Item>
-  );
-}
-```
-
----
-
-## 步骤 3: 使用真实接口（禁止 Mock）
-
-### 禁止使用 Mock 数据
-
-```tsx
-// ❌ 错误：使用 mock 数据
-const CUSTOMER_OPTIONS = [
-  { label: '客户A', value: 1 },
-  { label: '客户B', value: 2 },
-];
-
-<Select options={CUSTOMER_OPTIONS} />
-
-// ✅ 正确：使用真实接口
-const [customers, setCustomers] = useState([]);
-useEffect(() => {
-  client.models.customers.filter({
-    select: ['id', 'customer_name'],
-  }).then(result => {
-    setCustomers(result.tableData || []);
-  });
-}, []);
-
-<Select options={customers.map(c => ({
-  label: c.customer_name,
-  value: c.id,
-}))} />
-```
-
-### 标准接口调用方式
-
-```tsx
-import { LovrabetClient } from '@lovrabet/sdk';
-
-const client = new LovrabetClient({ appCode: 'your-app-code' });
-
-// 查询列表
-const result = await client.models.dataset_XXXXXXXXXX.filter({
-  where: { status: { $eq: 'active' } },
-  select: ['id', 'name'],
-  pageSize: 100,
-});
-
-const data = result.tableData || [];
-```
-
----
-
-## 步骤 4: 性能优化（避免循环访问）
-
-### 禁止模式：循环单个查询
-
-```tsx
-// ❌ 错误：循环查询单条（N 次接口调用）
-{orders.map(order => {
-  const [customer, setCustomer] = useState(null);
-
-  useEffect(() => {
-    client.models.customers.getOne(order.customer_id)
-      .then(result => setCustomer(result));
-  }, [order.customer_id]);
-
-  return <div>{customer?.customer_name}</div>;
-})}
-```
-
-### 正确模式：批量查询
-
-```tsx
-// ✅ 正确：批量查询（1 次接口调用）
-const [customerMap, setCustomerMap] = useState(new Map());
-
-useEffect(() => {
-  const customerIds = [...new Set(orders.map(o => o.customer_id))];
-  client.models.customers.filter({
-    where: { id: { $in: customerIds } },
-    select: ['id', 'customer_name']
-  }).then(result => {
-    const map = new Map(
-      result.tableData?.map(c => [c.id, c.customer_name]) || []
-    );
-    setCustomerMap(map);
-  });
-}, [orders]);
-
-{orders.map(order => (
-  <div>{customerMap.get(order.customer_id)}</div>
-))}
-```
-
-### 性能对比
-
-| 方案 | 接口调用次数 | 耗时估算 |
-|------|-------------|---------|
-| 循环查询单条（100 条数据） | 100 次 | ~10 秒 |
-| 批量查询 | 1 次 | ~0.1 秒 |
-
----
-
-## 🎯 UI 风格规范
-
-### 禁止 emoji
-
-```tsx
-// ❌ 错误
-<Button>🚀 开始使用</Button>
-<message.success="🎉 操作成功！" />
-
-// ✅ 正确
-<Button>开始使用</Button>
-<message.success="操作成功" />
-```
-
-### 禁止 AI 味道的文案
-
-```tsx
-// ❌ 错误
-const messages = {
-  success: '太棒了！操作成功！',
-  confirm: '你确定要删除吗？',
-  cancel: '再想想吧~',
-};
-
-// ✅ 正确
-const messages = {
-  success: '操作成功',
-  confirm: '确定要删除吗？',
-  cancel: '取消',
-};
-```
-
-### 禁止感叹号
-
-```tsx
-// ❌ 错误
-<Button type="primary">保存！</Button>
-<Modal title="确认删除！">
-
-// ✅ 正确
-<Button type="primary">保存</Button>
-<Modal title="确认删除">
-```
-
-### 使用 AntD 图标
-
-```tsx
-// ❌ 错误：使用 emoji
-<Button>🆕 新建</Button>
-
-// ✅ 正确：使用 @ant-design/icons
-import { PlusOutlined } from '@ant-design/icons';
-<Button icon={<PlusOutlined />}>新建</Button>
-```
-
----
-
-## 📄 页面规范
-
-### 页面顶部注释（强制）
-
-**所有页面必须在文件顶部包含以下注释**：
+所有页面必须保留 CLI 生成注释：
 
 ```tsx
 /**
@@ -270,7 +35,11 @@ import { PlusOutlined } from '@ant-design/icons';
  */
 ```
 
-**修改记录追加**：
+规则：
+
+* 不要删除原始注释
+* 不要改写原始生成信息
+* 若需要记录后续修改，只追加 `@modified`
 
 ```tsx
 /**
@@ -282,134 +51,129 @@ import { PlusOutlined } from '@ant-design/icons';
  */
 ```
 
-### displayName（强制）
+### `displayName`
 
-**所有页面组件导出时必须设置 `displayName`**：
+所有页面组件导出时必须设置 `displayName`：
 
 ```tsx
 export default function UserProfile() {
-  // ...
+  return null;
 }
 
-UserProfile.displayName = '用户详情';
+UserProfile.displayName = "用户详情";
 ```
 
----
+规则：
 
-## 📝 组件规范
+* 使用简洁业务名称
+* 推荐 2 到 4 个字
+* 不要省略
 
-### Button 按钮
+## 数据集接入规则
+
+写页面前，必须先调用 `get_dataset_detail`。
+
+至少确认：
+
+* 字段名
+* 字段类型
+* 是否必填
+* 是否为枚举字段
+* 是否存在主外键关系
+
+禁止行为：
+
+* 未看数据集详情就直接写字段
+* 直接猜测 `status`、`name`、`customer_id` 之类字段
+* 把别的页面或别的项目中的字段名直接复制过来
+
+## 外键与枚举字段
+
+规则：
+
+* 外键字段的下拉数据，来自关联数据集接口
+* 枚举字段的选项，来自字段定义中的 `options`
+* 级联字段按父字段变化重新加载，不要硬编码
+
+不要做的事：
+
+* 用固定数组伪造正式下拉数据
+* 在未确认关系时直接把字段当外键处理
+
+## 前端 SDK 约束
+
+前端列表查询优先使用 `filter()`，单条主键查询使用 `getOne(id)`。
+
+示例：
 
 ```tsx
-// ✅ 正确
-<Button type="primary" onClick={handleSave}>
-  保存
-</Button>
-<Button onClick={handleCancel}>取消</Button>
-<Button danger onClick={handleDelete}>删除</Button>
-
-// 带图标（可选）
-<Button icon={<PlusOutlined />} type="primary">
-  新建
-</Button>
-```
-
-### Modal 确认弹窗
-
-```tsx
-// ✅ 正确
-Modal.confirm({
-  title: '确认删除',
-  content: '确定要删除这条记录吗？',
-  okText: '确定',
-  cancelText: '取消',
-  onOk: handleDelete,
+const result = await client.models.customers.filter({
+  where: { status: { $eq: "active" } },
+  select: ["id", "customer_name"],
 });
+
+const customer = await client.models.customers.getOne(customerId);
 ```
 
-### message 消息提示
+规则：
+
+* 使用 `filter()` 进行列表和条件查询
+* 不要在页面里写循环单条请求
+* 批量查询和性能优化统一参考 `06-data-api-guidelines.md`
+
+## 禁止 Mock 替代正式数据
+
+页面正式开发时：
+
+* 不要用 mock 数据替代真实接口
+* 不要把演示数据当成生产页面接入方案
+* 若页面仍未接通真实接口，应明确标记为占位或演示状态
+
+## UI 文案与风格约束
+
+只保留 Lovrabet 项目特有要求：
+
+* 不要使用 emoji
+* 不要使用 AI 味道文案
+* 不要在按钮和标题中使用感叹号
+* 图标使用 `@ant-design/icons`
+* 文案保持简洁、专业、中性
+
+示例：
 
 ```tsx
-// ✅ 正确
-import { message } from 'antd';
-
-message.success('保存成功');
-message.error('操作失败，请重试');
-message.warning('请填写必填项');
-message.info('正在处理...');
+message.success("操作成功");
+message.error("操作失败，请重试");
 ```
 
-### Form 表单
+不要写成：
 
 ```tsx
-// ✅ 正确
-<Form.Item
-  name="username"
-  label="用户名"
-  rules={[
-    { required: true, message: '请输入用户名' },
-    { min: 3, message: '用户名至少3个字符' },
-  ]}
->
-  <Input placeholder="请输入用户名" />
-</Form.Item>
+message.success("太棒了！操作成功！");
 ```
 
-### Empty 空状态
+## 禁止事项
 
-```tsx
-// ✅ 正确
-<Empty
-  description="暂无数据"
-  image={Empty.PRESENTED_IMAGE_SIMPLE}
-/>
+* 不要删除页面顶部生成注释
+* 不要省略 `displayName`
+* 不要未读数据集详情就写字段
+* 不要用 mock 数据替代正式接口
+* 不要在页面中做 N+1 查询
+* 不要使用 emoji、感叹号、AI 味道文案
 
-// 带操作按钮
-<Empty description="暂无数据">
-  <Button type="primary">创建数据</Button>
-</Empty>
-```
+## 自检清单
 
----
+* [ ] 页面顶部生成注释仍然存在
+* [ ] 如有手工修改，使用了 `@modified`
+* [ ] 页面组件已设置 `displayName`
+* [ ] 已调用 `get_dataset_detail` 获取字段与关系
+* [ ] 外键字段的数据来源已确认
+* [ ] 枚举字段的选项来源已确认
+* [ ] 未使用 mock 数据替代正式接口
+* [ ] 无循环单条查询
+* [ ] 文案简洁专业，无 emoji、无感叹号
 
-## 📋 文案规范对照表
+## 相关指南
 
-| 场景 | 正确 ✅ | 错误 ❌ |
-|------|--------|--------|
-| 按钮保存 | 保存 | 保存吧！ / 好的 |
-| 按钮取消 | 取消 | 再想想 / 算了吧 |
-| 按钮删除 | 删除 | 删除掉 |
-| 成功提示 | 操作成功 | 太棒了！ / 成功啦！ |
-| 失败提示 | 操作失败 | 哎呀出错了 |
-| 加载中 | 加载中... | 马上就好~ |
-| 空状态 | 暂无数据 | 还没有数据哦~ |
-| 确认删除 | 确定要删除吗？ | 你真的要删除吗？ |
-
----
-
-## ✅ 自检清单
-
-### 编写前检查
-- [ ] 使用 `get_dataset_detail` 获取数据集详情
-- [ ] 分析字段依赖关系（主外键）
-- [ ] 识别下拉框数据来源（外键字段用接口，枚举字段用 options）
-
-### 代码检查
-- [ ] 未使用 mock 数据，所有数据来自真实接口
-- [ ] 无循环访问接口（使用批量查询）
-- [ ] 字段名与数据集定义一致（区分大小写）
-
-### UI 风格检查
-- [ ] 没有 emoji
-- [ ] 没有感叹号
-- [ ] 文案简洁专业
-- [ ] 使用 @ant-design/icons
-- [ ] 页面顶部有注释
-- [ ] 组件设置了 displayName
-
----
-
-## 🔗 相关指南
-
-- **数据接口访问规范**：`06-data-api-guidelines.md`
-- **Backend Function 规范**：`05-backend-function.md`
+* `05-backend-function.md`
+* `06-data-api-guidelines.md`

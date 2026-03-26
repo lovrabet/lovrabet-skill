@@ -1,446 +1,274 @@
 ---
 # SQL 创建工作流
 
-**适用场景**: 创建新的 SQL 查询或修改现有 SQL
-**关键原则**: **先在规定目录写本地 `.sql` 文件并保存**，再经 MCP 验证与保存；头注释规范与冲突规避仍适用
+> 目标：约束 AI 在 Lovrabet 项目中创建、修改、验证、保存 SQL 时的行为，避免凭空编造字段、误存高风险语句、覆盖他人资源。
+>
+> 前置阅读：`02-mcp-sql-workflow.md`、`06-data-api-guidelines.md`
 
----
+## 何时使用
 
-## 本地文件优先（强制）
+当任务满足任一条件时，必须阅读并遵守本指南：
 
-* **目录**：与 `02-mcp-sql-workflow.md` 一致，自定义 SQL 本地稿放在项目 **`src/custom_sql/`** 下，按**业务功能**组织为 `.sql` 文件（可一文件多语句，勿按 CRUD 混在一个文件）。
-* **命名**：文件名可与头注释中 `@lovrabet.sqlName` 一致（如 `active-clue-list.sql`），便于与平台资源对应。
-* **流程**：新建或修改时，**先创建/编辑上述本地文件并保存**；调用 `validate_sql_content`、`save_or_update_custom_sql` 时，使用**该文件在磁盘上的当前内容**（与用户确认路径一致）。禁止仅在对话里贴出大段 SQL 却不在工作区落盘。
-* **版本管理**：**默认纳入 Git**（`git add` / `commit`），与业务代码一并评审；若团队不提交草稿，须在仓库内统一约定并配置 `.gitignore`。
+* 创建新的自定义 SQL
+* 修改已有 SQL
+* 将本地 SQL 保存到平台
+* 处理 SQL 命名冲突、blocked 或自动命名兜底
+* 处理 SQL 验证失败或执行失败
 
----
+## 核心原则
 
-## 🎯 目标
+* 本地文件优先，平台保存次之
+* 先校验数据集和字段，再写 SQL
+* SQL 名称由 AI 根据业务语义生成，不默认交给用户决定
+* 未验证通过前，不得保存到平台
+* 遇到 `blocked` 时，不得自动重试或绕过
 
-* 生成带规范头注释的 SQL 代码
-* 验证语法和字段引用
-* 检测并避免命名冲突
-* 安全保存到平台
+## 本地文件约定
 
----
+自定义 SQL 本地稿放在 `src/custom_sql/`：
 
-## 📌 @lovrabet 头注释规范
+* 文件按业务功能组织
+* 文件名可与 `@lovrabet.sqlName` 一致
+* 调用 `validate_sql_content`、`save_or_update_custom_sql` 时，使用磁盘上已保存的当前内容
 
-**所有 AI 生成的 SQL 必须以以下注释开头**：
+禁止行为：
+
+* 只在对话中贴 SQL，不在工作区落盘
+* 把不同业务功能混进一个 `insert.sql`、`update.sql` 之类的通用文件
+* 未保存本地文件就假定“已同步到平台”
+
+## `@lovrabet` 头注释
+
+所有 AI 生成的 SQL 必须以以下注释开头：
 
 ```sql
--- @lovrabet.sqlName: <业务语义名>
--- @lovrabet.description: <一句话描述>
+-- @lovrabet.sqlName: <business-name>
+-- @lovrabet.description: <one-line-description>
 ```
 
 规则：
-* `sqlName` 由 AI 根据业务语义生成，格式 `<领域>-<用途>`（全小写，`-` 分隔），例如：`active-clue-list`、`order-settlement-summary`、`customer-detail-by-id`
-* `description` 一句话说明查询目的
-* 注释必须放在 SQL 文件最前面，SQL 主体在注释之后
-* MCP 会自动从注释提取 `sqlName` 和 `description`，**无需用户手动填参数**
 
-**三级兜底策略**（当 AI 或用户没有提供时）：
+* `sqlName` 由 AI 按业务语义生成，格式建议为 `<领域>-<用途>`
+* `description` 用一句话说明查询目的
+* 头注释必须位于 SQL 文件最前面
+* 平台保存时，MCP 会优先从头注释提取 `sqlName` 和 `description`
 
-| 情况 | 名字来源 | `sqlNameSource` | 名字质量 |
-|------|---------|----------------|---------|
-| AI 写了头注释（主路径） | 注释 `@lovrabet.sqlName` | `comment` | 有业务语义，最佳 |
-| 用户手动传了 `sqlName` 参数 | 显式参数 | `param` | 取决于用户 |
-| 两者都没有（兜底） | MCP/toolbox 自动生成 | `auto` | 仅结构性（`clue-select-1k7z`），无业务语义 |
+### 自动命名兜底
 
-> 当 `sqlNameSource: 'auto'` 时，返回 message 里会提示：`sqlName was auto-generated`。AI 应立即提示用户为这条 SQL 补充有意义的名字，或重新发起一次带 `-- @lovrabet.sqlName:` 注释的保存。
+若保存结果出现 `sqlNameSource: "auto"`：
 
----
+* 说明这条 SQL 缺少有业务语义的名字
+* AI 必须提醒开发者补充 `@lovrabet.sqlName`
+* 不应把自动生成的结构化名字视为最终结果
 
-## 📋 完整工作流
+## 强制工作流
 
-### Step 1: 理解需求
-
-**AI 的职责**:
-```markdown
-在生成 SQL 之前，AI 应该：
-
-1. **询问关键信息**：
-   - 查询什么数据？
-   - 需要哪些字段？
-   - 有什么筛选条件？
-   - 排序和分页需求？
-
-2. **确认数据集**：
-   - 涉及哪些表？
-   - 是否需要 JOIN？
-   - 数据集的 code 是什么？
-
-3. **明确用途**（AI 主动决策，无需问用户）：
-   - AI 根据业务语义自行生成 sqlName，写入头注释
-   - 数据库 ID（dbId）—— 仅首次创建时需要；更新已有 SQL 时可省略（toolbox 会回填）
+```text
+理解需求 -> 查询现有 SQL -> 校验数据集与字段 -> 本地落盘 -> 验证 -> 保存 -> 测试执行
 ```
 
-**示例对话**:
-```
-用户: "帮我创建一个查询活跃线索的 SQL"
+### Step 1：理解需求
 
-AI 应该询问:
-- 需要哪些字段？（id, name, status...）
-- 什么算"活跃"？（status = 'active'?）
-- 需要排序吗？（按创建时间倒序?）
-- 数据集是 clue 吗？
+开始写 SQL 前，AI 必须确认：
 
-注意：AI 不需要问用户"给 SQL 起什么名字"，AI 根据业务语义自行生成。
-```
+* 查询目标是什么
+* 需要哪些字段
+* 筛选条件是什么
+* 是否需要排序或分页
+* 是否需要 JOIN
+* 是新建还是修改现有 SQL
 
-### Step 2: 生成 SQL 代码
+若这些信息缺失，必须先问清楚，再继续。
 
-**AI 的职责**:
-```markdown
-生成 SQL 时必须：
+### Step 2：查询现有 SQL
 
-0. **本地落盘**：在 `src/custom_sql/<sqlName>.sql` 创建或打开文件（`sqlName` 与即将写入的头注释一致），后续所有生成与修改都在该文件中进行并保存。
+开始创建或修改前，必须先调用 `list_sql_queries`。
 
-1. **在 SQL 最前面输出标准头注释**（必须，哪怕用户没说要名字）：
-   ```sql
-   -- @lovrabet.sqlName: active-clue-list
-   -- @lovrabet.description: 查询活跃线索列表
-   ```
-   - `sqlName` 由 AI 根据业务语义生成，格式：`<表/领域>-<用途>`（全小写，`-` 分隔）
-   - `description` 一句话描述查询目的
-   - MCP 会自动从注释中提取，无需用户手动填 sqlName 参数
+目的：
 
-2. **使用正确的表名和字段名**：
-   - 参考数据集的实际字段
-   - 避免字段名拼写错误
-   - 注意大小写敏感
+* 检查是否已有同名 SQL
+* 检查是否已有相似语义 SQL
+* 决定这次是新建还是修改
 
-3. **考虑性能**：
-   - 添加合适的索引字段
-   - 避免 SELECT *
-   - 添加 LIMIT 限制
+若已命中现有 SQL：
 
-4. **参数化查询**：
-   - 使用 MyBatis 语法: #{param}
-   - 支持动态条件: <if test="">
-```
+* 必须先确认是沿用现有 SQL 还是另起新名字
+* 未确认前，不得默认新建一个语义重复的 SQL
 
-**示例 SQL**:
-```sql
--- @lovrabet.sqlName: customer-active-list
--- @lovrabet.description: 查询活跃客户列表，用于客户管理主页面
+### Step 3：校验数据集、表和字段
 
-SELECT
-  id,
-  name,
-  email,
-  phone,
-  status,
-  created_at
-FROM customer
-WHERE status = 'active'
-  AND created_at > #{startDate}
-ORDER BY created_at DESC
-LIMIT #{pageSize}
+写 SQL 前，必须先调用：
+
+* `list_datasets` 或 `search_datasets`
+* `get_dataset_detail`
+
+必须确认：
+
+* 数据集真实存在
+* 表名真实存在
+* 字段真实存在
+* 字段类型匹配 SQL 用法
+* INSERT / UPDATE 涉及的必填字段已确认
+
+禁止行为：
+
+* 未调用 `get_dataset_detail` 就直接写字段名
+* 凭经验猜表名、字段名
+* 把其他项目里的字段名直接套用到当前 SQL
+
+### Step 4：本地落盘
+
+AI 必须先在工作区创建或修改本地 `.sql` 文件，再进入验证和保存流程。
+
+示例路径：
+
+```text
+src/custom_sql/customer-active-list.sql
 ```
 
-### Step 3: 提示验证步骤（关键！）
+本地 SQL 文件必须包含：
 
-**AI 必须提示用户验证**:
-```markdown
-AI 生成 SQL 后，应该提供以下信息：
+* `@lovrabet.sqlName`
+* `@lovrabet.description`
+* 可执行的 SQL 主体
 
----
+### Step 5：验证
 
-**✅ SQL 代码已生成！**
+保存到平台前，必须调用 `validate_sql_content`。
 
-接下来请按以下步骤验证和保存：
+验证目标：
 
-**1. 确认本地稿路径**
+* SQL 语法正确
+* 字段名、表名正确
+* 参数化写法正确
+* 不包含明显的非法语句结构
 
-* 可保存到平台的语句（SELECT / INSERT / UPDATE / WITH 等）：**单一事实源**为 `src/custom_sql/<sqlName>.sql`，请先保存文件，再执行下列 MCP 步骤。
-* DELETE 和 DDL（DROP/ALTER/CREATE/TRUNCATE 等）会被 MCP 拦截，**无法**自动保存到平台：同样建议落在 **`src/custom_sql/`**（可用独立文件名区分，如 `maintenance-truncate-xxx.sql`），仅作仓库内记录与评审，勿只放在聊天记录里。
+如果验证失败，AI 必须：
 
-**2. 验证语法和字段**
+1. 解释失败原因
+2. 回到本地文件修正 SQL
+3. 重新验证
 
-使用 MCP 工具 `validate_sql_content` 验证：
-- 传入 SQL 内容（应与 **`src/custom_sql/` 下已保存文件**一致）
-- 可选传入 `validateSchemas` 参数做字段引用校验
+未验证通过前，不得继续保存。
 
-如果验证失败，我会帮你修复。
+### Step 6：保存到平台
 
-**3. 保存到平台（自动检测提交人）**
+保存时使用 `save_or_update_custom_sql`。
 
-使用 MCP 工具 `save_or_update_custom_sql`：
-* `sqlContent`: 与本地稿一致的内容（头注释里已有 `@lovrabet.sqlName`，MCP 自动提取，无需另传 `sqlName`）
-* `dbId`: 数据库 ID（**新建时必填**，从 `get_dataset_detail` -> `basic.database.dbId` 获取；更新已有 SQL 时可省略）
-* `description`: 可选
+保存前必须保证：
 
-toolbox 会自动执行以下检测：
-* DELETE / DDL → 直接拦截，返回 blocked（**永不保存**）
-* 同名 SQL 且上次提交人不是你 → 返回 `blocked: true`，**告知用户手动操作，不重试**
-* 同名 SQL 且上次是你 → 直接更新
-* 无同名 SQL → 直接创建
+* 本地 SQL 文件已保存
+* `sqlContent` 与本地文件一致
+* 新建场景已拿到 `dbId`
+* 命名和描述语义清晰
 
----
+### Step 7：测试执行
+
+保存成功后，必须使用 `execute_custom_sql` 测试执行结果。
+
+如果测试失败，必须形成闭环：
+
+```text
+修改本地 SQL -> validate_sql_content -> save_or_update_custom_sql -> execute_custom_sql
 ```
 
-### Step 4: 处理验证结果
+## 非 SELECT 语句的处理
 
-**如果验证失败**:
-```markdown
-用户: "验证失败了，说字段不存在"
+DELETE、DDL（如 DROP / ALTER / CREATE / TRUNCATE）等高风险语句，不应按普通查询 SQL 直接自动保存到平台。
 
-AI 应该:
-1. 检查字段名是否正确
-2. 参考数据集的实际字段
-3. 修正 SQL 代码
-4. 再次调用 validate_sql_content 验证
+AI 必须：
 
-示例回复:
-"""
-抱歉！字段名写错了。让我修正：
+* 先提醒开发者该语句属于高风险类型
+* 继续保留本地文件稿
+* 不得假装它能像普通 SELECT 一样直接走自动保存路径
 
-**错误原因**: 字段 `phone_number` 不存在，应该是 `phone`
+这类 SQL 仍建议保留在 `src/custom_sql/` 中，作为仓库内记录与评审对象。
 
-**修正后的 SQL**:
-[修正后的代码]
+## 冲突与 blocked
 
-请再次使用 validate_sql_content 验证修正后的 SQL。
-"""
-```
+`save_or_update_custom_sql` 可能返回：
 
-### Step 5: 处理 blocked（提交人冲突）
+* `blocked`
+* `message`
+* `sqlNameSource`
 
-当 `save_or_update_custom_sql` 返回 `blocked: true` 时，表示同名 SQL 上次由其他人提交。
+如果返回 `blocked: true`：
 
-> ⛔ **AI 不能重试，不能用任何参数绕过**。必须直接告知用户：
+* 说明同名 SQL 上次由其他人提交，或当前操作被平台规则阻断
+* AI 不得自动重试
+* AI 不得编造任何绕过参数
+* AI 必须直接告知开发者：请前往平台手动处理，或改一个新名字
 
-```
-该 SQL「xxx」上次由其他人提交。
-如需更新，请前往 Lovrabet 平台手动操作，或联系上次提交人。
-```
+## AI 输出要求
 
-用户的选择：
-* 自行去平台操作
-* 联系上次提交人协调
-* 改一个新名字（AI 可协助重新生成带新 `sqlName` 的 SQL 并保存）
+当 AI 完成 SQL 生成或修改后，输出中至少包含：
 
-### Step 6: 确认保存成功
+* 本地 SQL 文件路径
+* 当前 SQL 是新建还是修改
+* 已校验的数据集与字段
+* 当前 `sqlName`
+* 是否已验证通过
+* 是否可以继续保存到平台
+* 若不能保存，明确阻塞原因
 
-**AI 应该确认**:
-```markdown
-用户: "保存成功了"
+若保存成功，还应补充：
 
-AI 应该回复:
-"""
-✅ **保存成功！**
+* SQL 标识信息
+* 下一步测试方式
+* 在前端或 BFF 中的调用方式
 
-**SQL 信息**：
-- 名称: customer-active-list
-- 数据库 ID: 100
-- 状态: 已创建/已更新
+## 调用方式差异
 
-**后续使用**：
+### 前端 SDK
 
-1. **在代码中调用**：
 ```typescript
-// 使用 Frontend SDK
 const result = await client.sql.execute({
-  sqlCode: 'customer-active-list',
+  sqlCode: "customer-active-list",
   params: {
-    startDate: '2024-01-01',
-    pageSize: 100
-  }
+    startDate: "2024-01-01",
+    pageSize: 100,
+  },
 });
 
 if (result.execSuccess && result.execResult) {
-  console.log('查询结果:', result.execResult);
+  console.log(result.execResult);
 }
 ```
 
-2. **在 BFF 中调用**：
-```typescript
-// Backend Function 中直接返回数组
-export default async function(params: any, context: any) {
-  const rows = await context.client.sql.execute({
-    sqlCode: 'customer-active-list',
-    params: params
-  });
-  // rows 是 T[] 数组，不是包装对象
+### Backend Function
 
-  return {
-    success: true,
-    data: rows
-  };
-}
+```javascript
+const rows = await context.client.sql.execute({
+  sqlCode: "customer-active-list",
+  params,
+});
+
+// rows 直接是数组
 ```
 
-3. **测试 SQL**：
-使用 `execute_custom_sql` MCP 工具：
-```
-sqlCode: "customer-active-list"
-params: { startDate: "2024-01-01" }
-```
+不要把前端 SDK 的 `{ execSuccess, execResult }` 结构套用到 BFF。
 
-**记录**：
-- SQL Code: `customer-active-list`
-- 创建时间: 2024-03-20
+## 常见问题
 
-建议将此信息记录到项目文档中。
-"""
-```
+### Q：是否要先查现有 SQL？
 
----
+A：对于新建或修改 SQL，优先先通过平台查询现状，避免重复创建或误改现有资源。
 
-## 🚨 关键检查点
+### Q：验证失败怎么办？
 
-### 检查点 1: 生成前
+A：先修正本地 SQL，再重新验证；不要跳过验证直接保存。
 
-```
-✅ 确认数据集信息
-✅ 确认字段名称
-✅ 确认查询条件
-✅ AI 已准备好根据业务语义命名（无需问用户）
-```
+### Q：`blocked` 怎么办？
 
-### 检查点 2: 验证前
+A：停止自动推进，告知开发者手动处理或改名，不要重试。
 
-```
-✅ SQL 头部有 -- @lovrabet.sqlName: <业务语义名>
-✅ SQL 头部有 -- @lovrabet.description: <用途描述>
-✅ SQL 语法正确
-✅ 字段名拼写正确
-✅ 表名正确
-✅ 参数化查询使用正确
-```
+### Q：为什么 SQL 名称是自动生成的？
 
-### 检查点 3: 保存前
+A：说明缺少 `@lovrabet.sqlName` 头注释。AI 应补上语义化命名，再重新保存。
 
-```
-✅ 验证已通过
-✅ SQL 类型不是 DELETE / DDL（否则需改为本地文件）
-✅ 了解同名资源情况（toolbox 会自动检测，无需提前查）
-```
+## 相关指南
 
-### 检查点 4: 保存后
-
-```
-✅ 保存成功确认
-✅ 记录 SQL Code
-✅ 提供使用示例
-✅ 建议测试方法
-```
-
----
-
-## 📖 示例场景
-
-### 场景 1: 全新创建（无冲突）
-
-```
-用户: "创建一个查询活跃客户的 SQL"
-
-AI:
-1. 询问字段需求
-2. 生成 SQL 代码
-3. 提示验证步骤
-4. 提示保存步骤
-
-用户:
-1. 执行验证脚本
-2. 执行保存脚本
-3. 确认成功
-
-结果: ✅ 无冲突，直接保存成功
-```
-
-### 场景 2: 修改自己的 SQL
-
-```
-用户: "给客户查询增加状态筛选"
-
-AI:
-1. 获取原 SQL（通过 sqlCode 或名称定位）
-2. 修改 SQL 内容
-3. 调用 save_or_update_custom_sql
-
-结果: ✅ toolbox 判断上次提交是本人，直接更新成功
-```
-
-### 场景 3: 同名 SQL 上次是他人提交
-
-```
-用户: "修改客户查询 SQL"
-
-AI:
-1. 调用 save_or_update_custom_sql
-2. toolbox 返回 blocked: true
-
-AI 回复用户:
-  「customer-query」上次由其他人提交，请手动前往平台操作，
-  或考虑改一个新名字，我可以帮你生成。
-
-结果: ✅ 未覆盖他人资源，用户可选择手动或改名
-```
-
----
-
-## 💡 AI 的核心职责
-
-### 必须做的 ✅
-
-1. **生成前确认** - 询问关键数据信息（字段、条件、表名）
-2. **自主命名** - 根据业务语义生成 `-- @lovrabet.sqlName`，不问用户
-3. **提供验证步骤** - 调用 `validate_sql_content` 验证 SQL
-4. **提供保存步骤** - 调用 `save_or_update_custom_sql` 保存
-5. **处理 blocked** - 返回 `blocked: true` 时，告知用户手动操作或改名，不重试
-6. **提供使用示例** - 告诉用户如何使用保存的 SQL
-7. **处理 auto 名字警告** - 若返回 `data.sqlNameSource === 'auto'`，提示用户补充语义名
-
-### 禁止做的 ❌
-
-1. **不要询问用户 SQL 名字** - AI 根据语义自行决定
-2. **不要生成没有头注释的 SQL** - 每条 SQL 必须有 `@lovrabet.sqlName`
-3. **不要忽略验证步骤** - 必须调用 `validate_sql_content` 验证
-4. **不要在 blocked 后重试** - 无论加什么参数都不行，只能告知用户
-5. **不要省略使用示例** - 保存后必须提供示例
-
----
-
-## 🎯 成功标准
-
-### 用户体验
-
-```
-✅ 用户知道如何验证代码
-✅ 用户知道如何保存代码
-✅ 用户理解冲突信息
-✅ 用户能做出安全的决策
-✅ 用户知道如何使用保存的 SQL
-```
-
-### 安全保障
-
-```
-✅ 代码经过验证
-✅ 冲突经过检测
-✅ 操作有记录
-✅ 风险有提示
-✅ 用户有选择
-```
-
-### 协作效率
-
-```
-✅ 不会意外覆盖他人代码
-✅ 团队成员可以协调
-✅ 资源有清晰的所有权
-✅ 修改有审计记录
-```
-
----
-
-## 📚 相关文档
-
-- **冲突检测指南**: `09-conflict-detection.md`
-- **最佳实践**: `10-best-practices.md`
-
----
-
-**记住**: AI 是助手，用户是决策者！
+* `02-mcp-sql-workflow.md`
+* `06-data-api-guidelines.md`
+* `09-conflict-detection.md`
+* `10-best-practices.md`
