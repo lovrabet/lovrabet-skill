@@ -69,6 +69,100 @@ const result = await client.models.article.filter({
 });
 ```
 
+### 批量操作（SDK >= 1.2.0）
+
+从 SDK v1.2.0 开始，支持批量更新和批量删除操作，单次最多 **1000 条**记录。
+
+#### 批量更新（Batch Update）
+
+**接口**：
+```typescript
+client.models.dataset_[code].update({
+  ids: (number | string)[],  // 记录 ID 数组（最多 1000 条）
+  data: Record<string, any>  // 要更新的字段
+})
+```
+
+**示例**：
+```typescript
+// ✅ 批量更新客户状态
+const result = await client.models.customer.update({
+  ids: [1, 2, 3, 4, 5],
+  data: {
+    status: 'active',
+    updateTime: new Date().toISOString()
+  }
+});
+```
+
+**注意事项**：
+- 单次最多更新 **1000 条**
+- 原子操作：要么全部成功，要么全部失败
+- 不能批量修改主键字段
+- 不能将必填字段设置为空值
+
+#### 批量删除（Batch Delete）
+
+**接口**：
+```typescript
+client.models.dataset_[code].delete({
+  ids: (number | string)[]  // 记录 ID 数组（最多 1000 条）
+})
+```
+
+**示例**：
+```typescript
+// ✅ 批量删除不活跃用户
+const inactiveUsers = await client.models.customer.filter({
+  where: { lastLoginTime: { $lt: '2026-01-01' } },
+  select: ['id']
+});
+
+await client.models.customer.delete({
+  ids: inactiveUsers.map(u => u.id)
+});
+```
+
+**注意事项**：
+- 单次最多删除 **1000 条**
+- 删除操作不可逆，建议先备份
+- 如果有外键约束，需要先删除关联数据
+
+#### 分批处理超过 1000 条的数据
+
+当数据量超过 1000 时，需要手动分批：
+
+```typescript
+async function batchUpdate(ids: number[], batchSize = 1000) {
+  for (let i = 0; i < ids.length; i += batchSize) {
+    const batch = ids.slice(i, i + batchSize);
+    await client.models.customer.update({
+      ids: batch,
+      data: { status: 'processed' }
+    });
+    console.log(`已处理 ${i + batch.length} / ${ids.length}`);
+  }
+}
+```
+
+### 别名模式（Alias Pattern）
+
+如果使用 `registerModels` 定义了别名，批量操作同样支持：
+
+```typescript
+// 注册别名
+client.registerModels({
+  customer: 'dataset_abc123',
+  order: 'dataset_def456'
+});
+
+// 使用别名批量操作
+await client.models.customer.update({
+  ids: [1, 2, 3],
+  data: { status: 'active' }
+});
+```
+
 ## 2. 自定义 SQL (SQL API)
 
 ### 强制返回值处理
