@@ -260,14 +260,14 @@ const TABLES = {
 const models = context.client.models;
 
 // 后续调用：models[TABLES.表名]
-const result = await models[TABLES.fm_protocol_extends].findOne({ id: 123 });
+const result = await models[TABLES.fm_protocol_extends].getOne(123);
 ```
 
 ### 常用方法
 
 | 方法              | 说明     | 返回值  |
 | ----------------- | -------- | ------- |
-| `findOne(params)` | 查询单条 | Object  |
+| `getOne(id)`     | 按主键查询单条 | Object  |
 | `filter(params)`  | 高级过滤 | List    |
 | `create(data)`    | 创建数据 | ID      |
 | `update(data)`    | 更新数据 | Boolean |
@@ -406,7 +406,7 @@ await context.client.db.transaction(async (tx) => {
   });
 
   // 查询记录
-  const user = await models[TABLES.users].findOne({ id });
+  const user = await models[TABLES.users].getOne(id);
 
   // 更新记录
   await models[TABLES.users].update({ id, age: 26 });
@@ -522,9 +522,9 @@ export default async function transfer(params, context) {
 
   await context.client.db.transaction(async (tx) => {
     // 1. 查询转出账户余额
-    const fromAccount = await models[TABLES.accounts].findOne({
-      id: params.fromAccountId,
-    });
+    const fromAccount = await models[TABLES.accounts].getOne(
+      params.fromAccountId,
+    );
 
     // 2. 余额校验
     if (fromAccount.balance < params.amount) {
@@ -538,9 +538,9 @@ export default async function transfer(params, context) {
     });
 
     // 4. 增加转入账户
-    const toAccount = await models[TABLES.accounts].findOne({
-      id: params.toAccountId,
-    });
+    const toAccount = await models[TABLES.accounts].getOne(
+      params.toAccountId,
+    );
     await models[TABLES.accounts].update({
       id: params.toAccountId,
       balance: toAccount.balance + params.amount,
@@ -744,9 +744,7 @@ export default async function createOrder(params, context) {
   const models = context.client.models;
 
   // 查询商品
-  const product = await models[TABLES.products].findOne({
-    id: params.productId,
-  });
+  const product = await models[TABLES.products].getOne(params.productId);
   if (!product || product.stock < params.quantity) {
     throw new Error(`库存不足`);
   }
@@ -803,7 +801,7 @@ src/backend-function/
 | HOOK（后置） | `{tablename}_after{Operation}.js`  | `after{Operation}`  | `users_afterFilter.js` → `afterFilter`    |
 | ENDPOINT     | `endpoint_{scriptName}.js`         | `{scriptName}`      | `endpoint_createOrder.js` → `createOrder` |
 
-**常见 Operation**：`Filter`、`GetList`、`FindOne`、`Create`、`Update`、`Delete`、`Aggregate`
+**常见 Operation**：`Filter`、`GetList`、`getOne`、`Create`、`Update`、`Delete`、`Aggregate`
 
 ---
 

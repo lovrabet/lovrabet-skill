@@ -158,7 +158,7 @@ const data = result.tableData || [];
   const [customer, setCustomer] = useState(null);
 
   useEffect(() => {
-    client.models.customers.findOne({ id: order.customer_id })
+    client.models.customers.getOne(order.customer_id)
       .then(result => setCustomer(result));
   }, [order.customer_id]);
 

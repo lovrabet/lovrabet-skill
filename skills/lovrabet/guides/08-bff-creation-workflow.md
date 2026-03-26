@@ -199,9 +199,7 @@ export default async function {scriptName}(params, context) {
     const models = client.models;
 
     // 3. 业务逻辑
-    const product = await models[TABLES.products].findOne({
-      id: params.productId,
-    });
+    const product = await models[TABLES.products].getOne(params.productId);
 
     if (!product) {
       throw new Error("商品不存在");

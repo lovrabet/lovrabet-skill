@@ -224,7 +224,7 @@ const customerOptions = customers.map(c => ({
 // 分析：订单表 customer_id 是外键
 // 创建订单前需要校验客户是否存在
 
-const customer = await customerDS.findOne({ id: params.customer_id });
+const customer = await customerDS.getOne(params.customer_id);
 if (!customer) {
   throw new Error(`客户 ${params.customer_id} 不存在`);
 }
