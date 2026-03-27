@@ -9,6 +9,19 @@ Lovrabet 中文名为**云兔**，也常写作 **yuntoo**。本文档是**路由
 
 详细 SDK 用法与参数示例优先读取 `./guides/*.md`；如需最新公开文档，再使用 Context7 查询，不要把 rules 文件当作完整 SDK 手册。
 
+## 核心原则（最高优先级，违反即为 BUG）
+
+**平台是唯一 source of truth。** 所有 BFF / SQL 代码在内存中生成，直接传入 MCP 工具保存到平台，成功后回写本地文件供人类查阅。
+
+**调用 MCP 保存工具时，以下行为全部禁止：**
+* 写临时文件（`.json`、`.txt`、`.tmp` 或任何中间文件）再读取
+* 压缩、minify、uglify、删注释、删空行、合并为单行
+* 手动 JSON.stringify / JSON-escape / 转义换行符
+* 用 `node -e`、`bun -e`、`python`、`cat`、`echo` 等外部命令构造参数
+* 截断或摘要代码内容（不管多长都传完整源码）
+
+MCP 工具调用是结构化参数传递，框架自动处理序列化。把内存中的完整字符串作为 `scriptContent` / `sqlContent` 参数传入即可。
+
 ## 强制读取规则（不可跳过）
 
 以下情况必须先调用 Read 工具读取对应文件，禁止依赖记忆直接回答或执行：
@@ -16,9 +29,9 @@ Lovrabet 中文名为**云兔**，也常写作 **yuntoo**。本文档是**路由
 | 触发条件 | 必须读取的文件 |
 |---------|--------------|
 | 创建 / 修改 / 保存 SQL | `./guides/02-mcp-sql-workflow.md` |
-| 涉及 SQL 本地落盘、目录规范 | `./guides/07-sql-creation-workflow.md` |
+| SQL 创建工作流（内存生成→平台→回写本地） | `./guides/07-sql-creation-workflow.md` |
 | 创建 / 修改 / 保存 BFF 脚本 | `./guides/08-bff-creation-workflow.md` |
-| 涉及 BFF 本地落盘、目录规范 | `./guides/05-backend-function.md` |
+| BFF 脚本编写规范与本地目录约定 | `./guides/05-backend-function.md` |
 | 遇到冲突提示 / blocked / confirmationRequired | `./guides/09-conflict-detection.md` |
 | 使用 TypeScript SDK / filter / sql.execute | `./guides/01-typescript-sdk.md` |
 | 数据接口设计、多表关联、性能优化 | `./guides/06-data-api-guidelines.md` |
@@ -26,11 +39,15 @@ Lovrabet 中文名为**云兔**，也常写作 **yuntoo**。本文档是**路由
 
 **执行顺序**：读完对应 guide → 再调用 MCP 工具 → 再回答用户。
 
-## 本地稿目录（自定义 SQL / BFF）
+## 本地回写目录（自定义 SQL / BFF）
 
-* **SQL**：在项目 **`src/custom_sql/`** 下按业务功能维护 `.sql` 文件，保存后再将内容用于 MCP 验证与保存；细则见 `02-mcp-sql-workflow.md`、`07-sql-creation-workflow.md`。
-* **BFF**：在项目 **`src/backend-function/`** 下按 `05-backend-function.md` 存放（ENDPOINT 在 `endpoint/`，HOOK 在表名子目录）；保存后再同步到平台；细则见 `05-backend-function.md`、`08-bff-creation-workflow.md`。
-* 上述业务目录建议纳入 Git。
+平台保存成功后，回写本地文件供人类查阅：
+
+* **SQL** → `src/custom_sql/<sqlName>.sql`（头注释含 `@lovrabet.sqlName`、`@lovrabet.sqlCode`、`@lovrabet.description`）
+* **BFF ENDPOINT** → `src/backend-function/endpoint/endpoint_<name>.js`
+* **BFF HOOK** → `src/backend-function/<tableName>/<tableName>_<hookName>.js`
+* 文件已存在时直接覆盖（平台版本即最新）
+* 上述业务目录建议纳入 Git
 
 ## 前置条件检测
 
@@ -87,15 +104,17 @@ Lovrabet 中文名为**云兔**，也常写作 **yuntoo**。本文档是**路由
     ├─ 创建/修改 SQL？
     │   ├─ 0. 读取 ./guides/02-mcp-sql-workflow.md（必须）
     │   ├─ 1. 用 MCP: get_dataset_detail（了解结构）
-    │   ├─ 2. 生成 SQL 代码
+    │   ├─ 2. 在内存中生成 SQL
     │   ├─ 3. 用 MCP: validate_sql_content（验证）
     │   ├─ 4. 用 MCP: save_or_update_custom_sql（保存，含冲突检测）
-    │   └─ 5. 用 MCP: execute_custom_sql（测试）
+    │   ├─ 5. 用 MCP: execute_custom_sql（测试）
+    │   └─ 6. 回写本地 src/custom_sql/<sqlName>.sql
     │
     ├─ 创建/修改 BFF？
     │   ├─ 0. 读取 ./guides/08-bff-creation-workflow.md（必须）
-    │   ├─ 1. 生成 BFF 代码
-    │   └─ 2. 用 MCP: save_or_update_bff_script（保存，含冲突检测）
+    │   ├─ 1. 在内存中生成 BFF 代码
+    │   ├─ 2. 用 MCP: save_or_update_bff_script（保存，含冲突检测）
+    │   └─ 3. 回写本地 src/backend-function/...
     │
     ├─ 生成 SDK 代码？
     │   └─ 用 MCP: generate_sdk_code
