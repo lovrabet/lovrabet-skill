@@ -9,18 +9,21 @@
 ## 工作流
 
 ```
-确认需求 → 校验字段 → [按需]查平台 → 编写脚本 → 自检 → 保存到平台 → 写入本地
+速查公共函数 → 确认需求 → 校验字段 → [按需]查平台 → 编写脚本 → 自检 → 保存到平台 → 写入本地
 ```
 
+### 0. 速查公共函数
+调用 `list_bff_scripts`（type=COMMON）查看已有公共函数。如有可复用的工具函数，在后续脚本中直接 import，避免重复实现。
+
 ### 1. 确认需求
-写码前必须明确：类型（ENDPOINT/HOOK）、函数名、入参、返回结构、涉及的数据集。缺失则先问用户。
+写码前必须明确：类型（ENDPOINT/HOOK/COMMON）、函数名、入参、返回结构、涉及的数据集。缺失则先问用户。
 
 ### 2. 校验字段
 调用 `get_dataset_detail` 确认字段名、类型、枚举值、关联关系。禁止凭经验猜字段名。
 
 ### 3. 查平台（按需）
 * 新建 → 跳过
-* 修改已有 → 调 `list_bff_scripts` + `get_bff_script_info` 取 `id` 和最新内容
+* 修改已有 → 调 `list_bff_scripts`（ENDPOINT 或 COMMON） + `get_bff_script_info` 取 `id` 和最新内容
 * 不确定 → 查一下
 
 命中同名脚本时，停下问用户：修改还是另起新名。
@@ -37,12 +40,14 @@
 ### 6. 保存到平台
 调用 `save_or_update_bff_script`：
 * 新建不传 `id`，更新传 `id`
-* 必传 `scriptContent`、`description`、`functionName`（与脚本中 `export default async function` 后的函数名一致）
+* 必传 `scriptContent`、`description`、`scriptName`（与脚本中 `export default async function` 后的函数名一致）、`scriptType`（`ENDPOINT` 或 `COMMON`）
+* `scriptContent` 直接传完整源码原文，不要做压缩、JSON 转义、缩短变量名或写临时文件
 
 ### 7. 写入本地
 保存成功后，将脚本内容写入本地文件，纳入 Git 版本管理。
 * ENDPOINT → `src/backend-function/endpoint/endpoint_<name>.js`
 * HOOK → `src/backend-function/<tableName>/<tableName>_<hookName>.js`
+* COMMON → `src/backend-function/common/common_<name>.js`
 * 若文件已存在，直接覆盖
 
 ## 冲突处理

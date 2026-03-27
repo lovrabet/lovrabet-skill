@@ -25,10 +25,13 @@
 
 ## 脚本类型
 
-| 类型 | 作用 | 路径 / 触发方式 |
-|------|------|----------------|
-| HOOK | 挂在标准数据接口前后执行 | Before / After |
-| ENDPOINT | 独立业务端点 | `POST /api/{appCode}/endpoint/{scriptName}` |
+| 类型 | 作用 | 路径 / 触发方式 | 查询方式 |
+|------|------|----------------|----------|
+| HOOK | 挂在标准数据接口前后执行 | Before / After | 通过数据集详情 |
+| ENDPOINT | 独立业务端点 | `POST /api/{appCode}/endpoint/{scriptName}` | `list_bff_scripts`（默认） |
+| COMMON | 公共函数，供其他脚本 import 复用 | 被其他 BFF 引用 | `list_bff_scripts`（type=COMMON） |
+
+写 BFF 前，先查一下公共函数列表（`list_bff_scripts` type=COMMON），看是否有可复用的工具函数。
 
 ## 平台配置地址
 
@@ -48,14 +51,17 @@ src/backend-function/
 ├── <tableName>/
 │   ├── <tableName>_beforeFilter.js
 │   └── <tableName>_afterFilter.js
-└── endpoint/
-    └── endpoint_<scriptName>.js
+├── endpoint/
+│   └── endpoint_<scriptName>.js
+└── common/
+    └── common_<scriptName>.js
 ```
 
 规则：
 
 * HOOK 放在 `src/backend-function/<tableName>/`
 * ENDPOINT 放在 `src/backend-function/endpoint/`
+* COMMON 放在 `src/backend-function/common/`
 * 本地文件是可选的人类辅助物，平台是唯一 source of truth
 
 ## 文件命名与函数命名
@@ -65,6 +71,7 @@ src/backend-function/
 | HOOK Before | `<tableName>_before<Operation>.js` | `before<Operation>` |
 | HOOK After | `<tableName>_after<Operation>.js` | `after<Operation>` |
 | ENDPOINT | `endpoint_<scriptName>.js` | `<scriptName>` |
+| COMMON | `common_<scriptName>.js` | `<scriptName>` |
 
 常见 `Operation`：
 
@@ -139,7 +146,7 @@ src/backend-function/
 
 至少检查：
 
-* 函数名匹配（用于 `functionName` 参数）
+* 函数名匹配（用于 `scriptName` 参数）
 * 顶部注释占位符已替换
 * 单条查询是否统一使用 `getOne`
 * SQL 返回值是否按 BFF 语义处理
@@ -330,6 +337,57 @@ export default async function afterFilter(params) {
 * 平台最终会包装成 `{ success, data }`
 * 前端 SDK 调用 `client.bff.execute()` 时，拿到的是业务数据，不是 `{ success, data }`
 
+## 公共函数（COMMON）
+
+### 命名建议
+
+公共函数建议统一加 `common` 前缀（如 `commonGetUserInfo`），便于与普通 ENDPOINT 区分，也方便人和 AI 识别。
+
+### 在其他 BFF 中调用公共函数
+
+通过 `context.client.bff.execute` 调用：
+
+```javascript
+const userInfo = await context.client.bff.execute({
+  scriptName: 'commonGetUserInfo',
+  params: { userId: params.userId }
+});
+```
+
+参数说明：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `scriptName` | string | 是 | 公共函数名称（与 COMMON 脚本的 scriptName 一致） |
+| `params` | object | 否 | 传递的参数，默认 `{}` |
+
+### 注意事项
+
+* `scriptName` 必须与公共函数名称精确匹配（大小写敏感）
+* 调用必须使用 `await`
+* `params` 会被深拷贝，调用方的原始对象不会被修改
+* 公共函数不可循环调用（A 调 B，B 又调 A）
+* 公共函数抛出的异常会向上传播到调用方，需在调用方做 try-catch
+* 修改公共函数的出入参会影响所有引用方；如需改动，建议新建 V2 版本逐步切换
+
+### 组合调用示例
+
+```javascript
+export default async function createOrder(params, context) {
+  const orderNo = await context.client.bff.execute({
+    scriptName: 'commonGenerateOrderNo',
+    params: {}
+  });
+
+  const result = await context.client.bff.execute({
+    scriptName: 'commonCreateOrderWithTransaction',
+    params: { ...params, orderNo }
+  });
+
+  return result;
+}
+```
+
 ## SQL 调用规则
 
 在 BFF 中使用：
@@ -399,10 +457,10 @@ await context.client.db.transaction(async (tx) => {
 
 ## 自检清单
 
-* [ ] 已确认脚本类型是 Before / After / Endpoint
+* [ ] 已确认脚本类型是 Before / After / Endpoint / Common
 * [ ] 已读取 `get_dataset_detail`
 * [ ] 字段名、类型、关系已核对
-* [ ] 函数名正确（将作为 `functionName` 参数传入）
+* [ ] 函数名正确（将作为 `scriptName` 参数传入）
 * [ ] 顶部注释完整且占位符已替换
 * [ ] 数据集映射使用 32 位编码
 * [ ] 单条查询统一使用 `getOne`

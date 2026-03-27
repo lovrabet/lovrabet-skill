@@ -38,7 +38,7 @@
 ### 6. 保存到平台
 调用 `save_or_update_custom_sql`：
 * 新建需传 `dbId`（从 `get_dataset_detail` 获取）
-* 传 `sqlContent`（完整 SQL）和 `sqlName`
+* 传 `sqlContent`（完整 SQL 原文，不要压缩、转义或写临时文件）和 `sqlName`
 
 ### 7. 测试
 保存成功后调 `execute_custom_sql` 验证。失败则修正 → validate → save → execute。

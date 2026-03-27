@@ -31,7 +31,8 @@ Lovrabet 中文名为**云兔**，也常写作 **yuntoo**。
 | 验证 SQL | `validate_sql_content` |
 | 保存 SQL | `save_or_update_custom_sql` |
 | 执行 SQL | `execute_custom_sql` |
-| 列出 BFF | `list_bff_scripts` |
+| 列出 BFF（ENDPOINT） | `list_bff_scripts` |
+| 列出公共函数（COMMON） | `list_bff_scripts`（type=COMMON） |
 | 获取 BFF 详情 | `get_bff_script_info` |
 | 保存 BFF | `save_or_update_bff_script` |
 
@@ -127,7 +128,7 @@ await client.models.customer.delete({ ids: [1, 2, 3] });
 3. `get_dataset_detail` 确认表名、字段名、`dbId`，禁止凭经验猜
 4. 编写完整 SQL，头注释含 `@lovrabet.sqlName`、`@lovrabet.description`
 5. `validate_sql_content` 验证，失败则修正后重新验证
-6. `save_or_update_custom_sql` 保存（新建传 `dbId`，更新传 `id`）
+6. `save_or_update_custom_sql` 保存（新建传 `dbId`，更新传 `id`；`sqlContent` 直接传原始 SQL 文本，不要做压缩、转义或写临时文件）
 7. `execute_custom_sql` 测试执行
 8. 写入本地 `src/custom_sql/<sqlName>.sql`（含 `@lovrabet.sqlCode`），纳入 Git
 
@@ -151,16 +152,38 @@ await client.models.customer.delete({ ids: [1, 2, 3] });
 3. 修改已有 → `list_bff_scripts` + `get_bff_script_info` 取 `id` 和最新内容
 4. 编写完整脚本，使用 `export default async function`
 5. 自检：方法名、`getOne` 统一、BFF 中 SQL 返回数组（非 `{ execSuccess, execResult }`）
-6. `save_or_update_bff_script`（新建不传 `id`，更新传 `id`；必传 `scriptContent`、`description`、`functionName`）
-7. 写入本地：ENDPOINT → `src/backend-function/endpoint/endpoint_<name>.js`，HOOK → `src/backend-function/<tableName>/<tableName>_<hookName>.js`，纳入 Git
+6. `save_or_update_bff_script`（新建不传 `id`，更新传 `id`；必传 `scriptContent`、`description`、`scriptName`、`scriptType`；`scriptName` 是 `export default function` 后的函数名；`scriptType` 为 `ENDPOINT` 或 `COMMON`；`scriptContent` 直接传完整源码，不要做压缩、转义或写临时文件）
+7. 写入本地：ENDPOINT → `src/backend-function/endpoint/endpoint_<name>.js`，HOOK → `src/backend-function/<tableName>/<tableName>_<hookName>.js`，COMMON → `src/backend-function/common/common_<name>.js`，纳入 Git
 
 blocked → 写草稿 `.draft.js`，告知用户手动处理
+
+### BFF 脚本类型
+
+| 类型 | 用途 | 查询方式 |
+|------|------|----------|
+| ENDPOINT | 独立业务端点，前端通过 `client.bff.execute()` 调用 | `list_bff_scripts`（默认） |
+| HOOK | 挂在标准数据接口前后执行（Before/After） | 通过数据集详情查看 |
+| COMMON | 公共函数，供其他 BFF 脚本 import 复用 | `list_bff_scripts`（type=COMMON） |
+
+写 BFF 前，先查一下公共函数列表（`list_bff_scripts` type=COMMON），看是否有可复用的工具函数，避免重复实现。
+
+### 公共函数调用
+
+在 BFF 中调用公共函数：`await context.client.bff.execute({ scriptName: 'commonXxx', params: {} })`
+
+* 命名建议加 `common` 前缀，便于区分
+* `scriptName` 必须精确匹配（大小写敏感）
+* `params` 会被深拷贝，不影响调用方原始对象
+* 禁止循环调用（A 调 B，B 又调 A）
+* 异常会向上传播，调用方需 try-catch
+* 修改公共函数出入参会影响所有引用方，建议新建 V2 逐步切换
 
 ### BFF 脚本要点
 
 * HOOK Before：修改 `params`（filter/aggregate 改 `params.where`）
 * HOOK After：修改 `params.tableData`
 * ENDPOINT：独立业务端点，返回业务对象
+* COMMON：公共工具函数，被其他脚本 import
 * 数据集调用：`context.client.models.dataset_xxx`，推荐用 TABLES 映射表
 * 系统字段（id、create_time、modify_time、create_by、modify_by）不要手动设置
 * 事务：`await context.client.db.transaction(async (tx) => { ... })`
