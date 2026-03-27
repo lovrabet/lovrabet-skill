@@ -56,7 +56,7 @@ src/backend-function/
 
 * HOOK 放在 `src/backend-function/<tableName>/`
 * ENDPOINT 放在 `src/backend-function/endpoint/`
-* 本地文件是脚本的单一事实源
+* 本地文件是可选的人类辅助物，平台是唯一 source of truth
 
 ## 文件命名与函数命名
 
@@ -79,7 +79,7 @@ src/backend-function/
 ## 强制工作流
 
 ```text
-理解需求 -> 校验数据集与字段 -> 选择脚本类型 -> 本地落盘 -> 自检 -> 再进入保存或同步流程
+理解需求 -> 校验数据集与字段 -> 选择脚本类型 -> 生成脚本（内存）-> 自检 -> 直接提交平台
 ```
 
 ### Step 1：理解需求
@@ -117,11 +117,11 @@ src/backend-function/
 * After：修改返回结果、做脱敏、补充展示字段
 * ENDPOINT：独立业务流程、事务、多表写入、复杂业务端点
 
-### Step 4：本地落盘
+### Step 4：生成脚本
 
-生成或修改脚本时，必须先写入工作区文件。
+在内存（对话上下文）中生成完整脚本，无需写入本地文件。
 
-本地文件必须包含：
+脚本必须包含：
 
 * 顶部注释
 * `export default async function`
@@ -129,11 +129,17 @@ src/backend-function/
 * 数据集映射
 * 必要的错误处理
 
+本地文件为可选，仅在以下情况写入：
+
+* 提交平台成功后 → 回写本地供人工查阅（正常路径）
+* 保存被 `blocked` → 写草稿（`endpoint_<name>.draft.js`）供人工处理
+* 用户要求"把平台最新同步到本地"
+
 ### Step 5：自检
 
 至少检查：
 
-* 文件名与函数名匹配
+* 函数名匹配（用于 `functionName` 参数）
 * 顶部注释占位符已替换
 * 单条查询是否统一使用 `getOne`
 * SQL 返回值是否按 BFF 语义处理
@@ -396,7 +402,7 @@ await context.client.db.transaction(async (tx) => {
 * [ ] 已确认脚本类型是 Before / After / Endpoint
 * [ ] 已读取 `get_dataset_detail`
 * [ ] 字段名、类型、关系已核对
-* [ ] 文件名和函数名正确
+* [ ] 函数名正确（将作为 `functionName` 参数传入）
 * [ ] 顶部注释完整且占位符已替换
 * [ ] 数据集映射使用 32 位编码
 * [ ] 单条查询统一使用 `getOne`
