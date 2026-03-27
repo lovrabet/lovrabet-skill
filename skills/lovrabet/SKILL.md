@@ -3,142 +3,207 @@ name: lovrabet
 description: 当用户请求涉及 Lovrabet/云兔/yuntoo 平台的数据集查询、SQL 创建、BFF 开发时使用。触发词：数据集、数据表、自定义 SQL、filter、sql.execute、bff.execute、get_dataset_detail、validate_sql_content、save_or_update_custom_sql、save_or_update_bff_script、@lovrabet/sdk、MCP SQL 工作流、多表关联、lovrabet 开发。
 ---
 
-# Lovrabet 开发工作流（路由指南）
+# Lovrabet 开发工作流
 
-Lovrabet 中文名为**云兔**，也常写作 **yuntoo**。本文档是**路由指南**，告诉你什么场景用什么工具/文档。
+Lovrabet 中文名为**云兔**，也常写作 **yuntoo**。
 
-详细 SDK 用法与参数示例优先读取 `./guides/*.md`；如需最新公开文档，再使用 Context7 查询，不要把 rules 文件当作完整 SDK 手册。
+## 核心原则
 
-## 核心原则（最高优先级，违反即为 BUG）
+* 平台是唯一 source of truth；修改已有 SQL / BFF 时从平台拉最新内容
+* 不要臆测 API、字段名、数据集 code，写代码前先用 MCP 获取元数据
+* 直接调用 MCP 工具完成查询、验证、保存，不要用命令行绕行 MCP 协议
+* SQL / BFF 写好后，通过 MCP 工具保存到平台，同时保留本地文件供版本管理
 
-**平台是唯一 source of truth。** 所有 BFF / SQL 代码在内存中生成，直接传入 MCP 工具保存到平台，成功后回写本地文件供人类查阅。
+## 前置条件：MCP 可用检测
 
-**调用 MCP 保存工具时，以下行为全部禁止：**
-* 写临时文件（`.json`、`.txt`、`.tmp` 或任何中间文件）再读取
-* 压缩、minify、uglify、删注释、删空行、合并为单行
-* 手动 JSON.stringify / JSON-escape / 转义换行符
-* 用 `node -e`、`bun -e`、`python`、`cat`、`echo` 等外部命令构造参数
-* 截断或摘要代码内容（不管多长都传完整源码）
+尝试调用任何 Lovrabet MCP 工具（如 `list_datasets`）。找到则继续；未找到则提示用户 `lovrabet mcp install`。
 
-MCP 工具调用是结构化参数传递，框架自动处理序列化。把内存中的完整字符串作为 `scriptContent` / `sqlContent` 参数传入即可。
+## MCP 工具速查
 
-## 强制读取规则（不可跳过）
-
-以下情况必须先调用 Read 工具读取对应文件，禁止依赖记忆直接回答或执行：
-
-| 触发条件 | 必须读取的文件 |
-|---------|--------------|
-| 创建 / 修改 / 保存 SQL | `./guides/02-mcp-sql-workflow.md` |
-| SQL 创建工作流（内存生成→平台→回写本地） | `./guides/07-sql-creation-workflow.md` |
-| 创建 / 修改 / 保存 BFF 脚本 | `./guides/08-bff-creation-workflow.md` |
-| BFF 脚本编写规范与本地目录约定 | `./guides/05-backend-function.md` |
-| 遇到冲突提示 / blocked / confirmationRequired | `./guides/09-conflict-detection.md` |
-| 使用 TypeScript SDK / filter / sql.execute | `./guides/01-typescript-sdk.md` |
-| 数据接口设计、多表关联、性能优化 | `./guides/06-data-api-guidelines.md` |
-| 报错、行为异常、无法确定原因 | `./guides/04-troubleshooting.md` |
-
-**执行顺序**：读完对应 guide → 再调用 MCP 工具 → 再回答用户。
-
-## 本地回写目录（自定义 SQL / BFF）
-
-平台保存成功后，回写本地文件供人类查阅：
-
-* **SQL** → `src/custom_sql/<sqlName>.sql`（头注释含 `@lovrabet.sqlName`、`@lovrabet.sqlCode`、`@lovrabet.description`）
-* **BFF ENDPOINT** → `src/backend-function/endpoint/endpoint_<name>.js`
-* **BFF HOOK** → `src/backend-function/<tableName>/<tableName>_<hookName>.js`
-* 文件已存在时直接覆盖（平台版本即最新）
-* 上述业务目录建议纳入 Git
-
-## 前置条件检测
-
-### 检测 MCP 是否可用（必需）
-
-```
-检测方式：尝试调用任何 Lovrabet 相关的 MCP 工具
-- 查找工具名包含 "lovrabet" 或 "dataset" 的 MCP 工具
-- 常见工具：get_auth_status、list_datasets、get_dataset_detail
-- ✅ 找到 → MCP 可用，继续
-- ❌ 未找到 → 提示用户：lovrabet mcp install
-```
-
-**注意**：MCP 服务器名字可能是自定义的，不一定叫 `lovrabet-dataset`
-
-## 工具路由规则
-
-### 查询和分析 → 用 MCP Tools
-
-| 场景 | 使用的 MCP Tool |
-|------|----------------|
-| 列出所有数据集 | `list_datasets` |
+| 场景 | MCP Tool |
+|------|----------|
+| 列出数据集 | `list_datasets` |
 | 搜索数据集 | `search_datasets` |
 | 获取数据集详情 | `get_dataset_detail` |
-| 执行已保存的 SQL | `execute_custom_sql` |
-| 列出 SQL 查询 | `list_sql_queries` |
-| 列出 BFF 脚本 | `list_bff_scripts` |
-| 获取 BFF 详情 | `get_bff_script_info` |
 | 生成 SDK 代码 | `generate_sdk_code` |
 | 生成 SQL 代码 | `generate_sql_code` |
+| 列出 SQL | `list_sql_queries` |
+| 验证 SQL | `validate_sql_content` |
+| 保存 SQL | `save_or_update_custom_sql` |
+| 执行 SQL | `execute_custom_sql` |
+| 列出 BFF | `list_bff_scripts` |
+| 获取 BFF 详情 | `get_bff_script_info` |
+| 保存 BFF | `save_or_update_bff_script` |
 
-**规则**：直接调用 MCP 工具，不要生成脚本
+## SDK 核心规则
 
-### 验证和保存 → 用 MCP Tools（含冲突检测）
+### 初始化
 
-| 场景 | 使用的 MCP Tool | 说明 |
-|------|----------------|------|
-| 验证 SQL 语法 | `validate_sql_content` | 静态语法 + 可选 schema 验证 |
-| 保存 SQL | `save_or_update_custom_sql` | 通过 toolbox，自动冲突检测 |
-| 保存 BFF | `save_or_update_bff_script` | 通过 toolbox，自动冲突检测 |
-
-**冲突处理**：保存工具返回 `blocked: true`（例如他人为最后提交者）时，告知用户在平台上手动处理，**不要**自动重试同一保存。`confirmationRequired` / `nextAction` 等字段以工具返回为准；细节见 `09-conflict-detection.md`。
-
-**BFF 写入类 MCP**：若看不到 `list_bff_scripts` / `save_or_update_bff_script`，请在数据集 MCP 的启动参数中加入 `--enable-bff-save`，旧名 `--dangerously-bff-save` 仍可用；详见 `08-bff-creation-workflow.md` 中的“平台同步与协作速查”。
-
-## 快速决策树
-
-```
-用户请求
-    │
-    ├─ 查询数据？
-    │   └─ 用 MCP: execute_custom_sql / generate_sql_code
-    │
-    ├─ 创建/修改 SQL？
-    │   ├─ 0. 读取 ./guides/02-mcp-sql-workflow.md（必须）
-    │   ├─ 1. 用 MCP: get_dataset_detail（了解结构）
-    │   ├─ 2. 在内存中生成 SQL
-    │   ├─ 3. 用 MCP: validate_sql_content（验证）
-    │   ├─ 4. 用 MCP: save_or_update_custom_sql（保存，含冲突检测）
-    │   ├─ 5. 用 MCP: execute_custom_sql（测试）
-    │   └─ 6. 回写本地 src/custom_sql/<sqlName>.sql
-    │
-    ├─ 创建/修改 BFF？
-    │   ├─ 0. 读取 ./guides/08-bff-creation-workflow.md（必须）
-    │   ├─ 1. 在内存中生成 BFF 代码
-    │   ├─ 2. 用 MCP: save_or_update_bff_script（保存，含冲突检测）
-    │   └─ 3. 回写本地 src/backend-function/...
-    │
-    ├─ 生成 SDK 代码？
-    │   └─ 用 MCP: generate_sdk_code
-    │
-    └─ 不确定？
-        └─ 读取 `./guides/04-troubleshooting.md`
+```typescript
+import { createClient } from "@lovrabet/sdk";
+const client = createClient({
+  appCode: "your-app-code",
+  accessKey: process.env.LOVRABET_ACCESS_KEY,
+  models: [{ tableName: "users", datasetCode: "abc123", alias: "users" }],
+});
 ```
 
-## 全部 Guides 索引
+### Filter 查询（最常用）
 
-> 推荐通过 `npx skills add lovrabet/lovrabet-skill` 安装后，guide 与本文档同目录下的 `./guides/`。若团队改用 Lovrabet CLI 从公司 CDN 安装，实际路径以 CLI 落盘位置为准（见项目内 README）。
+```typescript
+const result = await client.models.users.filter({
+  where: { status: { $eq: "active" } },
+  select: ["id", "name"],
+  orderBy: [{ createTime: "desc" }],
+  currentPage: 1,
+  pageSize: 20,
+});
+// result.tableData, result.total
+```
 
-| 用户需求 | 参考的 Guide 文档 |
-|---------|------------------|
-| 使用 TypeScript SDK | `./guides/01-typescript-sdk.md` |
-| 创建自定义 SQL（MCP 模式） | `./guides/02-mcp-sql-workflow.md` |
-| React 前端开发 | `./guides/03-frontend-development.md` |
-| 故障排查 | `./guides/04-troubleshooting.md` |
-| 创建 BFF 脚本 | `./guides/05-backend-function.md` |
-| 数据接口规范 | `./guides/06-data-api-guidelines.md` |
-| SQL 创建工作流 | `./guides/07-sql-creation-workflow.md` |
-| BFF 创建、同步与协作 | `./guides/08-bff-creation-workflow.md` |
-| 冲突检测和处理 | `./guides/09-conflict-detection.md` |
-| 团队协作最佳实践 | `./guides/10-best-practices.md` |
+参数名强制约束：`select`（非 fields）、`orderBy`（非 sort）、`currentPage`/`pageSize`（非 page/limit）
 
-## 配置文件位置
-- **Guides 目录**：`./guides/`
+where 条件强制使用操作符：`$eq` `$ne` `$gte` `$lte` `$gt` `$lt` `$in` `$contain` `$startWith` `$endWith`
+
+逻辑组合用 `$and` / `$or`，可嵌套。
+
+### SQL 调用
+
+```typescript
+const data = await client.sql.execute<MyRow>({ sqlCode: "xxx", params: { key: "val" } });
+if (data.execSuccess && data.execResult) {
+  console.log(data.execResult); // T[]
+}
+```
+
+返回 `{ execSuccess, execResult }`，应用层必须检查 `execSuccess`。
+
+### BFF 调用
+
+```typescript
+const result = await client.bff.execute<DashboardData>({
+  scriptName: "getUserDashboard",
+  params: { userId: "123" },
+});
+console.log(result.userCount); // 直接是业务数据
+```
+
+返回业务数据对象，没有 `execSuccess` 层。
+
+### 错误处理
+
+所有 SDK 调用必须 try-catch，HTTP 级错误抛出 `LovrabetError`。
+
+### 前端 vs BFF 关键差异
+
+| | 前端 SDK | BFF (context.client) |
+|---|---------|---------------------|
+| SQL 返回值 | `{ execSuccess, execResult }` | 直接返回数组 `T[]` |
+| 单条查询 | `getOne(id)` | `getOne(id)` |
+| 调 BFF | `client.bff.execute({ scriptName, params })` | — |
+
+### 批量操作（SDK >= 1.2.0）
+
+批量更新/删除单次最多 1000 条：
+```typescript
+await client.models.customer.update({ ids: [1, 2, 3], data: { status: "active" } });
+await client.models.customer.delete({ ids: [1, 2, 3] });
+```
+
+### 性能约束
+
+* 禁止循环单条查询（N+1），用 `filter + $in` 批量查询或多表关联
+* 禁止循环写入，用自定义 SQL 批量处理
+* 多表关联：`select: ["id", "profile.username"]`（1:1 或 N:1，使用表名引用）
+
+## SQL 工作流
+
+```
+确认需求 → [按需]查现有 SQL → 校验字段 → 编写 SQL → 验证 → 保存到平台 → 测试 → 写入本地
+```
+
+1. 明确查询目标、字段、条件、是否 JOIN、新建还是修改
+2. 修改已有 → `list_sql_queries` 找目标拉内容；不确定 → 查一下
+3. `get_dataset_detail` 确认表名、字段名、`dbId`，禁止凭经验猜
+4. 编写完整 SQL，头注释含 `@lovrabet.sqlName`、`@lovrabet.description`
+5. `validate_sql_content` 验证，失败则修正后重新验证
+6. `save_or_update_custom_sql` 保存（新建传 `dbId`，更新传 `id`）
+7. `execute_custom_sql` 测试执行
+8. 写入本地 `src/custom_sql/<sqlName>.sql`（含 `@lovrabet.sqlCode`），纳入 Git
+
+非 SELECT / blocked → 写草稿 `<sqlName>.draft.sql`，告知用户手动处理
+
+### MyBatis 动态 SQL 要点
+
+* 固定参数 `#{param}`，动态参数（`<if>` 内）`#{param, jdbcType=TYPE}`
+* `<where>` 自动处理 AND/OR 前缀
+* SQL 正文中 `>` 写 `&gt;`、`<` 写 `&lt;`；`<if test="">` 属性内不需要转义
+* jdbcType：VARCHAR / INTEGER / DECIMAL / DATE / TIMESTAMP
+
+## BFF 工作流
+
+```
+确认需求 → 校验字段 → [按需]查平台 → 编写脚本 → 自检 → 保存到平台 → 写入本地
+```
+
+1. 明确类型（ENDPOINT/HOOK）、函数名、入参、返回结构、涉及的数据集
+2. `get_dataset_detail` 确认字段名、类型、枚举值、关联关系
+3. 修改已有 → `list_bff_scripts` + `get_bff_script_info` 取 `id` 和最新内容
+4. 编写完整脚本，使用 `export default async function`
+5. 自检：方法名、`getOne` 统一、BFF 中 SQL 返回数组（非 `{ execSuccess, execResult }`）
+6. `save_or_update_bff_script`（新建不传 `id`，更新传 `id`；必传 `scriptContent`、`description`、`functionName`）
+7. 写入本地：ENDPOINT → `src/backend-function/endpoint/endpoint_<name>.js`，HOOK → `src/backend-function/<tableName>/<tableName>_<hookName>.js`，纳入 Git
+
+blocked → 写草稿 `.draft.js`，告知用户手动处理
+
+### BFF 脚本要点
+
+* HOOK Before：修改 `params`（filter/aggregate 改 `params.where`）
+* HOOK After：修改 `params.tableData`
+* ENDPOINT：独立业务端点，返回业务对象
+* 数据集调用：`context.client.models.dataset_xxx`，推荐用 TABLES 映射表
+* 系统字段（id、create_time、modify_time、create_by、modify_by）不要手动设置
+* 事务：`await context.client.db.transaction(async (tx) => { ... })`
+
+## 冲突处理
+
+`save_or_update_custom_sql` / `save_or_update_bff_script` 返回 `blocked: true` 时：
+* 告知用户手动在平台操作
+* 将内容写入本地草稿文件
+* 禁止重试、禁止绕过
+
+未保存成功时必须明确告知用户，禁止含糊带过。
+
+## 前端页面规则
+
+* CLI 生成的页面顶部注释必须保留，追加说明用 `@modified`
+* 页面组件设置 `displayName`
+* 写页面前必须 `get_dataset_detail` 确认字段和关系
+* 外键字段数据来自关联数据集接口，枚举字段来自定义的 options
+* 禁止 emoji、AI 味文案、感叹号、花哨颜色；文案简洁专业
+* 图标用 `@ant-design/icons`，颜色用 AntD token
+
+## 接口选型优先级
+
+遇到新需求时按优先级选择实现方式：
+1. 标准 SDK 接口（filter/getOne/create 等）— 能用就不写 SQL
+2. Aggregate 聚合接口 — 简单分组汇总
+3. 自定义 SQL — 复杂 JOIN、数据库函数
+4. BFF — 外部系统调用、跨表事务、复杂业务编排
+
+## 深入指南
+
+以下 guide 文件提供各主题的详细说明、完整示例和边界情况，遇到具体问题时可查阅：
+
+| 主题 | Guide |
+|------|-------|
+| SDK 完整参数与返回值 | `./guides/01-typescript-sdk.md` |
+| MCP SQL 工具与 MyBatis 语法 | `./guides/02-mcp-sql-workflow.md` |
+| 前端页面开发约束 | `./guides/03-frontend-development.md` |
+| 故障诊断手册 | `./guides/04-troubleshooting.md` |
+| BFF 脚本编写规范 | `./guides/05-backend-function.md` |
+| 数据接口访问规范 | `./guides/06-data-api-guidelines.md` |
+| SQL 创建工作流细则 | `./guides/07-sql-creation-workflow.md` |
+| BFF 创建工作流细则 | `./guides/08-bff-creation-workflow.md` |
+| 冲突检测与处理 | `./guides/09-conflict-detection.md` |
+| 开发质量与最佳实践 | `./guides/10-best-practices.md` |
