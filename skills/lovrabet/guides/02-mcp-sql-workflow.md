@@ -23,9 +23,9 @@
 ### 2. `get_dataset_detail`
 * **用途**：写 SQL 前获取表结构，**绝对禁止凭空编造表名或字段名**。
 * **提取项**：
-  * 真实表名：`basic.tableName`
-  * 真实字段列表：`fields` 下的 `code`、`type`、`required`
-  * 数据库 ID：`basic.database.dbId`（验证与保存时需要）
+  * 真实表名：`dbtableConfig.tableName`
+  * 真实字段列表：`fields` 下的 `name`、`dbType`、`required`、`autoIncrement`等字段
+  * 数据库 ID：`dbtableConfig.dbId`（验证与保存时需要）
 
 ### 3. `validate_sql_content`
 * **用途**：保存前的强制卡点。
