@@ -194,7 +194,7 @@ src/backend-function/
 /**
  * 脚本功能描述
  *
- * [接口路径] POST /api/{appCode}/endpoint/{scriptName}
+ * [接口路径] POST /api/endpoint/{appCode}/{scriptName}
  * [平台配置] https://app.lovrabet.com/app/{appCode}/data/backend-function
  *
  * [HTTP 请求体参数]

@@ -100,7 +100,7 @@ console.log(result.userCount); // 直接是业务数据
 | | 前端 SDK | BFF (context.client) |
 |---|---------|---------------------|
 | SQL 返回值 | `{ execSuccess, execResult }` | 直接返回数组 `T[]` |
-| 单条查询 | `getOne(id)` | `getOne(id)` |
+| 单条查询 | `getOne(id)` | `getOne({id: 1})` |
 | 调 BFF | `client.bff.execute({ scriptName, params })` | — |
 
 ### 批量操作（SDK >= 1.2.0）
